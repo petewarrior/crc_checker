@@ -1,9 +1,37 @@
+import 'dart:io';
+
 import 'package:crclib/catalog.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (!kIsWeb) {
+    // not running on the web!
+    if (Platform.isWindows || Platform.isIOS || Platform.isLinux) {
+      await windowManager.ensureInitialized();
+
+      WindowOptions windowOptions = const WindowOptions(
+        // size: Size(720, 540),
+        center: true,
+        fullScreen: false,
+        minimumSize: Size(720, 540),
+      );
+
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+        // await windowManager.setAspectRatio(4 / 3);
+        await windowManager.setMaximizable(false);
+        await windowManager.setTitle("CRC Checker");
+      });
+    }
+  }
+
   runApp(const MyApp());
 }
 
@@ -14,7 +42,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CRC Calculator',
+      title: 'CRC Checker',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
@@ -63,59 +91,71 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.max,
+      body: Center(
+        child: Row(
           children: [
-            const Text(
-              'Drop the file here',
+            Expanded(
+                child: Container(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.max,
+                        children: [
+                          // const Text(
+                          //   'Drop the file here',
+                          // ),
+                          // Expanded(
+                          //   child:
+                          AspectRatio(
+                            aspectRatio: 1.0,
+                            child: DropTarget(
+                                onDragDone: (detail) {
+                                  setState(() {
+                                    // _list.addAll(detail.files);
+                                  });
+                                  calculateCrc(detail.files);
+                                },
+                                onDragEntered: (detail) {
+                                  setState(() {
+                                    _dragging = true;
+                                  });
+                                },
+                                onDragExited: (detail) {
+                                  setState(() {
+                                    _dragging = false;
+                                  });
+                                },
+                                child: Container(
+                                    height: double.infinity,
+                                    width: double.infinity,
+                                    color: _dragging
+                                        ? Colors.blue.withOpacity(0.4)
+                                        : Colors.black26,
+                                    child: const Center(
+                                        child: Text("Drop the files here")))),
+                          ),
+                          Container(
+                              margin: const EdgeInsets.all(10),
+                              child: OutlinedButton(
+                                onPressed: bars.isNotEmpty
+                                    ? () {
+                                        // Respond to button press
+                                        setState(() {
+                                          bars.clear();
+                                        });
+                                      }
+                                    : null,
+                                child: const Text("Clear"),
+                              ))
+                        ]))),
+            Expanded(
+              flex: 2,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: bars,
+                ),
+              ),
             ),
-            // Expanded(
-            //   child:
-            AspectRatio(
-              aspectRatio: 1.0,
-              child: DropTarget(
-                  onDragDone: (detail) {
-                    setState(() {
-                      // _list.addAll(detail.files);
-                    });
-                    calculateCrc(detail.files);
-                  },
-                  onDragEntered: (detail) {
-                    setState(() {
-                      _dragging = true;
-                    });
-                  },
-                  onDragExited: (detail) {
-                    setState(() {
-                      _dragging = false;
-                    });
-                  },
-                  child: Container(
-                      height: double.infinity,
-                      width: double.infinity,
-                      color: _dragging
-                          ? Colors.blue.withOpacity(0.4)
-                          : Colors.black26,
-                      child: const Center(child: Text("Drop here")))),
-            ),
-            Column(
-              // shrinkWrap: true,
-              children: bars,
-              // )
-            ),
-            OutlinedButton(
-              onPressed: bars.isNotEmpty
-                  ? () {
-                      // Respond to button press
-                      setState(() {
-                        bars.clear();
-                      });
-                    }
-                  : null,
-              child: const Text("Clear"),
-            )
           ],
         ),
       ),

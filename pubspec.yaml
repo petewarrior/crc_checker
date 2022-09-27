@@ -39,6 +39,7 @@ dependencies:
   crclib: ^3.0.0
   desktop_drop: ^0.3.3
   cross_file: ^0.3.3+2
+  window_manager: ^0.2.7
 
 dev_dependencies:
   flutter_test:
