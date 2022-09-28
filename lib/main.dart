@@ -1,10 +1,13 @@
 import 'dart:io';
 
 import 'package:crclib/catalog.dart';
+import 'package:crclib/crclib.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:isolate/isolate.dart';
 import 'package:window_manager/window_manager.dart';
 
 void main() async {
@@ -26,7 +29,7 @@ void main() async {
         await windowManager.show();
         await windowManager.focus();
         // await windowManager.setAspectRatio(4 / 3);
-        await windowManager.setMaximizable(false);
+        // await windowManager.setMaximizable(false);
         await windowManager.setTitle("CRC Checker");
       });
     }
@@ -73,14 +76,24 @@ class _MyHomePageState extends State<MyHomePage> {
   List<Widget> bars = [];
 
   bool _dragging = false;
+  CrcService crcService = CrcService();
 
   calculateCrc(List<XFile> files) {
     // status = [];
-    for (var l in files) {
-      setState(() {
-        bars.add(FileReadProgress(file: l));
-      });
-    }
+    List<Widget> b = files
+        .map((file) => FileReadProgress(file: file, crcService: crcService))
+        .toList();
+    // []..length = files.length;
+    // for (var l in files) {
+    //   b.add(FileReadProgress(
+    //     file: l,
+    //     crcService: crcService,
+    //   ));
+    // }
+
+    setState(() {
+      bars.addAll(b);
+    });
   }
 
   @override
@@ -110,9 +123,6 @@ class _MyHomePageState extends State<MyHomePage> {
                             aspectRatio: 1.0,
                             child: DropTarget(
                                 onDragDone: (detail) {
-                                  setState(() {
-                                    // _list.addAll(detail.files);
-                                  });
                                   calculateCrc(detail.files);
                                 },
                                 onDragEntered: (detail) {
@@ -146,7 +156,10 @@ class _MyHomePageState extends State<MyHomePage> {
                                       }
                                     : null,
                                 child: const Text("Clear"),
-                              ))
+                              )),
+                          Text(crcService.balancer != null
+                              ? 'Threads: ${crcService.balancer!.length}'
+                              : ''),
                         ]))),
             Expanded(
               flex: 2,
@@ -165,7 +178,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
 class FileReadProgress extends StatefulWidget {
   final XFile file;
-  const FileReadProgress({super.key, required this.file});
+  final CrcService crcService;
+
+  const FileReadProgress(
+      {super.key, required this.file, required this.crcService});
 
   @override
   State<FileReadProgress> createState() => _FileReadProgressState();
@@ -181,12 +197,14 @@ class _FileReadProgressState extends State<FileReadProgress> {
   }
 
   processFile(XFile file) async {
-    var value = await Crc32Xz().bind(file.openRead()).single;
-
-    // var value = crc32.single;
+    var startTime = DateTime.now().millisecondsSinceEpoch;
+    // var value = await Crc32Xz().bind(file.openRead()).single;
+    var value = await widget.crcService.calculateCrc(file);
+    var endTime = DateTime.now().millisecondsSinceEpoch;
 
     setState(() {
-      result = 'CRC32: ${value.toRadixString(16).toUpperCase()}';
+      result =
+          'CRC32: ${value.toRadixString(16).padLeft(8, '0').toUpperCase()} ${(endTime - startTime).toString().padLeft(5, ' ')}ms';
     });
   }
 
@@ -197,13 +215,48 @@ class _FileReadProgressState extends State<FileReadProgress> {
       children: [
         Expanded(
           flex: 3,
-          child: Text(widget.file.name),
+          child: SelectableText(widget.file.name),
         ),
         Expanded(
             child: result == null
                 ? LinearProgressIndicator(semanticsLabel: widget.file.name)
-                : Text(result!))
+                : SelectableText(
+                    result!,
+                    style: GoogleFonts.inconsolata(),
+                  ))
       ],
     );
+  }
+}
+
+class CrcService {
+  LoadBalancer? balancer;
+  late int _threads;
+
+  CrcService({int threads = 8}) {
+    // initBalancer();
+    _threads = threads;
+  }
+
+  get threads {
+    return _threads;
+  }
+
+  Stream<int> getCurrentThreadCount() async* {}
+
+  set threads(value) {
+    // TODO restart balancer with new thread count
+    _threads = value;
+  }
+
+  initBalancer() async {}
+
+  Future<CrcValue> calculateCrc(XFile file) async {
+    balancer ??= await LoadBalancer.create(_threads, IsolateRunner.spawn);
+    return await balancer!.run(_calculate, file);
+  }
+
+  Future<CrcValue> _calculate(XFile file) async {
+    return await Crc32Xz().bind(file.openRead()).single;
   }
 }
